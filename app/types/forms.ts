@@ -1,0 +1,15 @@
+export type FormFieldType =
+  | 'text'
+  | 'number'
+  | 'email'
+  | 'textarea'
+  | 'select'
+  | 'checkbox'
+  | 'radio'
+  | 'date'
+  | 'time'
+  | 'file'
+  | 'signature'
+  | 'payment'
+  | 'conditional'
+  | 'image';

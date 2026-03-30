@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__supabase__list_tables",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__get_advisors",
+      "Bash(xargs:*)",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__search_docs",
+      "WebFetch(domain:ui.shadcn.com)",
+      "WebFetch(domain:tanstack.com)",
+      "Bash(npx tsc:*)",
+      "Bash(ls:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm install:*)",
+      "Bash(find:*)",
+      "Read(//c/Users/Boobalan/Pictures/Screenshots/**)",
+      "Skill(brainstorming)",
+      "Bash(supabase status)",
+      "mcp__supabase__generate_typescript_types",
+      "mcp__supabase__get_logs",
+      "Bash(npm run build)",
+      "Bash(tail -n 50 \"app/(routes)/personal/forms/[formId]/responses/page.tsx\")",
+      "Bash(npm run dev)",
+      "Bash(timeout 5 bash -c 'while true; do sleep 1; done')",
+      "Bash(timeout 3 bash -c 'while true; do sleep 1; done')",
+      "Read(//c/Users/Boobalan/Downloads/**)",
+      "Bash(npm run update-forms-api-key:*)",
+      "Bash(cat:*)",
+      "Bash(xxd:*)",
+      "mcp__plugin_supabase_supabase__list_projects",
+      "mcp__plugin_supabase_supabase__execute_sql"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase",
+    "sequential-thinking",
+    "memory",
+    "actor-critic-thinking"
+  ]
+}

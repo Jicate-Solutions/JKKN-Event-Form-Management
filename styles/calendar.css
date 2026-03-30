@@ -1,0 +1,60 @@
+.rbc-calendar {
+  @apply rounded-lg bg-background min-h-[600px] h-full w-full;
+}
+
+.rbc-toolbar {
+  @apply mb-4 flex flex-wrap gap-2 items-center justify-between;
+}
+
+.rbc-toolbar button {
+  @apply rounded-md border bg-background px-3 py-1 text-sm hover:bg-accent;
+}
+
+.rbc-toolbar button.rbc-active {
+  @apply bg-primary text-primary-foreground;
+}
+
+.rbc-event {
+  @apply rounded-md px-2 py-1 !bg-primary/20 border border-primary;
+}
+
+/* Event hover effects */
+.rbc-event:hover {
+  @apply bg-primary/30 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.rbc-event .group:hover .hidden {
+  display: flex !important;
+}
+
+.rbc-today {
+  @apply !bg-accent/50;
+}
+
+.rbc-header {
+  @apply py-2 border-muted;
+}
+
+.rbc-off-range-bg {
+  @apply !bg-muted/20;
+}
+
+.rbc-month-view,
+.rbc-time-view {
+  @apply border-muted;
+}
+
+/* Make calendar responsive */
+@media (max-width: 768px) {
+  .rbc-toolbar {
+    @apply flex-col items-stretch;
+  }
+
+  .rbc-toolbar-label {
+    @apply text-center my-2;
+  }
+}
+
+/* Add more custom styles as needed */

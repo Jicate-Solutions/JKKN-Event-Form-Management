@@ -42,7 +42,9 @@ const STATE_OPTIONS: { value: ConditionalRuleState; label: string }[] = [
   { value: 'equal_to_date', label: 'Equal To (Date)' },
   { value: 'not_equal_to_date', label: 'Not Equal To (Date)' },
   { value: 'equal_to_day', label: 'Equal To (Day)' },
-  { value: 'not_equal_to_day', label: 'Not Equal To (Day)' }
+  { value: 'not_equal_to_day', label: 'Not Equal To (Day)' },
+  { value: 'age_greater_than_or_equal', label: 'Age ≥ (Years)' },
+  { value: 'age_less_than', label: 'Age < (Years)' }
 ];
 
 const ACTION_OPTIONS: { value: ConditionalRuleAction; label: string }[] = [
@@ -135,6 +137,14 @@ const getStateOptionsForFieldType = (
         {
           value: 'not_equal_to_day' as ConditionalRuleState,
           label: 'Not Equal To (Day)'
+        },
+        {
+          value: 'age_greater_than_or_equal' as ConditionalRuleState,
+          label: 'Age ≥ (Years)'
+        },
+        {
+          value: 'age_less_than' as ConditionalRuleState,
+          label: 'Age < (Years)'
         }
       ];
 

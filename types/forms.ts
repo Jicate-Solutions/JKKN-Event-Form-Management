@@ -28,7 +28,9 @@ export type ConditionalRuleState =
   | 'contains'
   | 'not_contains'
   | 'greater_than'
-  | 'less_than';
+  | 'less_than'
+  | 'age_greater_than_or_equal'
+  | 'age_less_than';
 
 export type ConditionalRuleAction =
   | 'show'

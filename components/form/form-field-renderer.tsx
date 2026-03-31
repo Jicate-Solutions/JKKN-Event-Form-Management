@@ -118,6 +118,36 @@ const evaluateConditionalRule = (
       result = Number(sourceFieldValue) < Number(ruleValue);
       break;
 
+    case 'age_greater_than_or_equal': {
+      // Calculate age from a date field value and compare
+      if (sourceFieldValue) {
+        const birthDate = new Date(sourceFieldValue);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        result = age >= Number(ruleValue);
+      }
+      break;
+    }
+
+    case 'age_less_than': {
+      // Calculate age from a date field value and compare
+      if (sourceFieldValue) {
+        const birthDate = new Date(sourceFieldValue);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        result = age < Number(ruleValue);
+      }
+      break;
+    }
+
     case 'before':
       result = new Date(sourceFieldValue) < new Date(ruleValue || '');
       break;

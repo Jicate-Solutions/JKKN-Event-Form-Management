@@ -32,6 +32,9 @@
     "actor-critic-thinking": {
       "command": "npx",
       "args": ["-y", "mcp-server-actor-critic-thinking"]
+    },
+    "jkkn-ai-forms": {
+      "url": "http://localhost:3000/api/mcp"
     }
   }
 }

@@ -426,10 +426,11 @@ export const PersonalFormService = {
   async duplicateForm(
     sourceFormId: string,
     sourceType: 'institutional' | 'personal',
-    userId: string
+    userId: string,
+    supabaseClient?: any
   ): Promise<PersonalForm> {
     try {
-      const supabase = createClientSupabaseClient();
+      const supabase = supabaseClient || createClientSupabaseClient();
 
       let sourceForm: any;
       let fields: FormField[];
@@ -476,7 +477,7 @@ export const PersonalFormService = {
         enable_user_autofetch: false,
         require_institutional_profile: false,
         allow_manual_entry_fallback: false
-      });
+      }, supabase);
     } catch (error) {
       console.error('Error duplicating form:', error);
       throw error;
@@ -600,10 +601,11 @@ export const PersonalFormService = {
    */
   async updateCollaboratorPermissions(
     collaboratorId: string,
-    permissions: UpdateCollaboratorPermissionsPayload
+    permissions: UpdateCollaboratorPermissionsPayload,
+    supabaseClient?: any
   ): Promise<PersonalFormCollaborator> {
     try {
-      const supabase = createClientSupabaseClient();
+      const supabase = supabaseClient || createClientSupabaseClient();
 
       const { data, error } = await supabase
         .from('personal_form_collaborators')
@@ -898,10 +900,11 @@ export const PersonalFormService = {
    * Get response statistics for a personal form
    */
   async getResponseStatistics(
-    personalFormId: string
+    personalFormId: string,
+    supabaseClient?: any
   ): Promise<PersonalFormStats> {
     try {
-      const supabase = createClientSupabaseClient();
+      const supabase = supabaseClient || createClientSupabaseClient();
 
       // Use the helper function
       const { data, error } = await supabase.rpc('get_personal_form_stats', {
@@ -971,15 +974,15 @@ export const PersonalFormService = {
    * Export responses to CSV format
    * Requires: Creator OR collaborator with can_export_data
    */
-  async exportToCSV(personalFormId: string, userId?: string): Promise<string> {
+  async exportToCSV(personalFormId: string, userId?: string, supabaseClient?: any): Promise<string> {
     try {
       // Check permissions if userId provided
       if (userId) {
         await this.checkExportDataPermission(personalFormId, userId);
       }
 
-      const form = await this.getPersonalForm(personalFormId);
-      const responses = await this.getAllResponsesForExport(personalFormId);
+      const form = await this.getPersonalForm(personalFormId, undefined, supabaseClient);
+      const responses = await this.getAllResponsesForExport(personalFormId, supabaseClient);
 
       if (responses.length === 0) {
         throw new Error('No responses to export');

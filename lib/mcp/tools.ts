@@ -318,6 +318,7 @@ export function registerTools(server: McpServer) {
           supabase
         );
         if (!form) return toolError('Form not found');
+        if (form.created_by !== userId) return toolError('Only the form owner can delete this form');
 
         await PersonalFormService.deletePersonalForm(args.form_id, supabase);
         return toolSuccess({
@@ -380,12 +381,14 @@ export function registerTools(server: McpServer) {
     },
     async (args, extra) => {
       try {
-        extractAuth(extra); // Verify authenticated
+        const { token } = extractAuth(extra);
+        const supabase = createMcpSupabaseClient(token);
         const { PersonalFormService } = await import(
           '@/lib/services/personal-form-service'
         );
         const stats = await PersonalFormService.getResponseStatistics(
-          args.form_id
+          args.form_id,
+          supabase
         );
         return toolSuccess(stats);
       } catch (error) {
@@ -511,14 +514,16 @@ export function registerTools(server: McpServer) {
     },
     async (args, extra) => {
       try {
-        const { userId } = extractAuth(extra);
+        const { userId, token } = extractAuth(extra);
+        const supabase = createMcpSupabaseClient(token);
         const { PersonalFormService } = await import(
           '@/lib/services/personal-form-service'
         );
 
         const csv = await PersonalFormService.exportToCSV(
           args.form_id,
-          userId
+          userId,
+          supabase
         );
         return toolSuccess({ format: 'csv', data: csv });
       } catch (error) {
@@ -543,6 +548,7 @@ export function registerTools(server: McpServer) {
     async (args, extra) => {
       try {
         const { userId, token } = extractAuth(extra);
+        const supabase = createMcpSupabaseClient(token);
         const { PersonalFormService } = await import(
           '@/lib/services/personal-form-service'
         );
@@ -550,11 +556,11 @@ export function registerTools(server: McpServer) {
         const newForm = await PersonalFormService.duplicateForm(
           args.form_id,
           'personal',
-          userId
+          userId,
+          supabase
         );
 
         if (args.new_title) {
-          const supabase = createMcpSupabaseClient(token);
           await PersonalFormService.updatePersonalForm(
             newForm.id,
             { title: args.new_title },
@@ -646,7 +652,8 @@ export function registerTools(server: McpServer) {
           const updated =
             await PersonalFormService.updateCollaboratorPermissions(
               existing.id,
-              args.permissions
+              args.permissions,
+              supabase
             );
           return toolSuccess({
             collaborator: updated,
@@ -1008,11 +1015,12 @@ export function registerTools(server: McpServer) {
         const { token } = extractAuth(extra);
         const supabase = createMcpSupabaseClient(token);
 
+        const safeQuery = args.query.replace(/[%_\\]/g, '');
         const { data, error } = await supabase
           .from('profiles')
           .select('id, email, full_name, role, avatar_url')
           .or(
-            `full_name.ilike.%${args.query}%,email.ilike.%${args.query}%`
+            `full_name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%`
           )
           .eq('is_active', true)
           .limit(args.limit);

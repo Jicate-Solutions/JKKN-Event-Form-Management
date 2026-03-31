@@ -366,9 +366,10 @@ export default function PublicFormPage() {
         console.log('All files uploaded successfully');
       }
 
-      // Check if form has payment fields
+      // Check if form has visible payment fields (skip hidden ones from conditional logic)
       const paymentFields = form.fields.filter(
-        (field) => field.type === 'payment'
+        (field) =>
+          field.type === 'payment' && fieldVisibility[field.id] !== false
       );
       const hasPayment = paymentFields.length > 0;
       const totalAmount = paymentFields.reduce(

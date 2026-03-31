@@ -30,6 +30,24 @@ const evaluateConditionalRuleValue = (
       return Number(sourceValue) > Number(ruleValue);
     case 'less_than':
       return Number(sourceValue) < Number(ruleValue);
+    case 'age_greater_than_or_equal': {
+      if (!sourceValue) return false;
+      const birth = new Date(sourceValue);
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return age >= Number(ruleValue);
+    }
+    case 'age_less_than': {
+      if (!sourceValue) return false;
+      const birth = new Date(sourceValue);
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return age < Number(ruleValue);
+    }
     default:
       return false;
   }

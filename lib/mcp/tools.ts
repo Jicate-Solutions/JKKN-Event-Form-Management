@@ -177,8 +177,6 @@ export function registerTools(server: McpServer) {
         );
 
         const page = Math.floor(args.offset / args.limit) + 1;
-        // API key auth = admin, pass undefined userId to see all forms
-        const effectiveUserId = isApiKeyAuth(token) ? undefined : userId;
         const result = await PersonalFormService.getPersonalForms(
           {
             status: args.status,
@@ -186,7 +184,7 @@ export function registerTools(server: McpServer) {
             limit: args.limit,
             page,
           },
-          effectiveUserId,
+          userId,
           supabase
         );
 

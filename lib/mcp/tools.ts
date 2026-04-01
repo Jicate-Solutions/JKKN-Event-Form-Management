@@ -4,16 +4,8 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { extractAuth, hasMinimumRole, API_KEY_AUTH_MARKER, SERVICE_ROLE_AUTH_MARKER } from '@/lib/mcp/auth';
+import { extractAuth, hasMinimumRole } from '@/lib/mcp/auth';
 import { toolSuccess, toolError, createMcpSupabaseClient } from '@/lib/mcp/helpers';
-
-/**
- * Check if the current auth is via API key (permanent, admin-level).
- * When true, tools should skip user-specific filtering (admin sees all).
- */
-function isApiKeyAuth(token: string): boolean {
-  return token === API_KEY_AUTH_MARKER || token === SERVICE_ROLE_AUTH_MARKER;
-}
 
 // Shared Zod schema for form fields (used by create and update tools)
 const formFieldSchema = z.object({

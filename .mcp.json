@@ -34,7 +34,10 @@
       "args": ["-y", "mcp-server-actor-critic-thinking"]
     },
     "jkkn-ai-forms": {
-      "url": "http://localhost:3000/api/mcp"
+      "url": "https://ai-forms.jicate.solutions/api/mcp",
+      "headers": {
+        "Authorization": "Bearer mcp_sk_MX4X475ca_j1kwGtu9Q5ZuXXMsZHhTulZTSh9r4ypoA"
+      }
     }
   }
 }

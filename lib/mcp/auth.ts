@@ -1,5 +1,10 @@
 // lib/mcp/auth.ts
 // MCP authentication helpers — verifies tokens and extracts user info
+//
+// Three auth modes (tried in order):
+// 1. MCP_SECRET_KEY — permanent API key, never expires (for Claude Code / server-to-server)
+// 2. Supabase Service Role Key — admin access, never expires
+// 3. Supabase JWT — user-level access, expires in 1 hour (for OAuth / Claude.ai)
 
 import { createClient } from '@supabase/supabase-js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
@@ -8,10 +13,17 @@ import { ROLE_HIERARCHY, UserRole } from '@/lib/constants/roles';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+// Special marker for API key auth — tools check this to use admin client
+export const API_KEY_AUTH_MARKER = '__mcp_api_key__';
+export const SERVICE_ROLE_AUTH_MARKER = '__mcp_service_role__';
+
 /**
  * Verify a bearer token from an MCP request.
- * Supports Supabase JWT tokens (from Google OAuth sessions).
- * Returns AuthInfo with userId as clientId and role in scopes.
+ *
+ * Supports three auth modes:
+ * 1. MCP_SECRET_KEY (env var) — permanent, for Claude Code
+ * 2. SUPABASE_SERVICE_ROLE_KEY — permanent, admin access
+ * 3. Supabase user JWT — expires in 1 hour
  */
 export async function verifyToken(
   _req: Request,
@@ -19,6 +31,27 @@ export async function verifyToken(
 ): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined;
 
+  // Mode 1: Check against MCP_SECRET_KEY (permanent, never expires)
+  const mcpSecretKey = process.env.MCP_SECRET_KEY;
+  if (mcpSecretKey && bearerToken === mcpSecretKey) {
+    return {
+      token: API_KEY_AUTH_MARKER,
+      clientId: 'mcp-api-key-user',
+      scopes: ['super_admin'],
+    };
+  }
+
+  // Mode 2: Check against Supabase Service Role Key (permanent, never expires)
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (serviceRoleKey && bearerToken === serviceRoleKey) {
+    return {
+      token: SERVICE_ROLE_AUTH_MARKER,
+      clientId: 'service-role-user',
+      scopes: ['super_admin'],
+    };
+  }
+
+  // Mode 3: Supabase user JWT (expires in 1 hour)
   try {
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${bearerToken}` } },
@@ -60,7 +93,7 @@ export function extractAuth(extra: { authInfo?: AuthInfo }): {
 } {
   const authInfo = extra.authInfo;
   if (!authInfo?.clientId) {
-    throw new Error('Authentication required. Please provide a valid Supabase access token.');
+    throw new Error('Authentication required. Please provide a valid token or API key.');
   }
   return {
     userId: authInfo.clientId,

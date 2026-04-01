@@ -83,11 +83,21 @@ export async function verifyToken(
 }
 
 /**
+ * Check if the auth is via permanent API key (not user JWT).
+ */
+export function isApiKeyAuth(token: string): boolean {
+  return token === API_KEY_AUTH_MARKER || token === SERVICE_ROLE_AUTH_MARKER;
+}
+
+/**
  * Extract auth info from the MCP extra parameter.
  * Returns userId, role, and token. Throws if unauthenticated.
+ *
+ * For API key auth: userId is undefined (admin sees all, no user filtering).
+ * For JWT auth: userId is the actual Supabase user ID.
  */
 export function extractAuth(extra: { authInfo?: AuthInfo }): {
-  userId: string;
+  userId: string | undefined;
   role: string;
   token: string;
 } {
@@ -95,10 +105,14 @@ export function extractAuth(extra: { authInfo?: AuthInfo }): {
   if (!authInfo?.clientId) {
     throw new Error('Authentication required. Please provide a valid token or API key.');
   }
+
+  const token = authInfo.token;
+
   return {
-    userId: authInfo.clientId,
+    // API key auth = admin, no specific user → pass undefined to skip user filtering
+    userId: isApiKeyAuth(token) ? undefined : authInfo.clientId,
     role: authInfo.scopes?.[0] || 'public',
-    token: authInfo.token,
+    token,
   };
 }
 

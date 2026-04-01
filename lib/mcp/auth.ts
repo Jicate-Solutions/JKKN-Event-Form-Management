@@ -34,9 +34,11 @@ export async function verifyToken(
   // Mode 1: Check against MCP_SECRET_KEY (permanent, never expires)
   const mcpSecretKey = process.env.MCP_SECRET_KEY;
   if (mcpSecretKey && bearerToken === mcpSecretKey) {
+    // Use the configured default user, or fallback to the first super_admin
+    const defaultUserId = process.env.MCP_DEFAULT_USER_ID || 'mcp-api-key-user';
     return {
       token: API_KEY_AUTH_MARKER,
-      clientId: 'mcp-api-key-user',
+      clientId: defaultUserId,
       scopes: ['super_admin'],
     };
   }
@@ -44,9 +46,10 @@ export async function verifyToken(
   // Mode 2: Check against Supabase Service Role Key (permanent, never expires)
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (serviceRoleKey && bearerToken === serviceRoleKey) {
+    const defaultUserId = process.env.MCP_DEFAULT_USER_ID || 'service-role-user';
     return {
       token: SERVICE_ROLE_AUTH_MARKER,
-      clientId: 'service-role-user',
+      clientId: defaultUserId,
       scopes: ['super_admin'],
     };
   }

@@ -96,11 +96,11 @@ export function isApiKeyAuth(token: string): boolean {
  * Extract auth info from the MCP extra parameter.
  * Returns userId, role, and token. Throws if unauthenticated.
  *
- * For API key auth: userId is undefined (admin sees all, no user filtering).
+ * For API key auth: userId is the MCP_DEFAULT_USER_ID (or a placeholder).
  * For JWT auth: userId is the actual Supabase user ID.
  */
 export function extractAuth(extra: { authInfo?: AuthInfo }): {
-  userId: string | undefined;
+  userId: string;
   role: string;
   token: string;
 } {
@@ -109,13 +109,10 @@ export function extractAuth(extra: { authInfo?: AuthInfo }): {
     throw new Error('Authentication required. Please provide a valid token or API key.');
   }
 
-  const token = authInfo.token;
-
   return {
-    // API key auth = admin, no specific user → pass undefined to skip user filtering
-    userId: isApiKeyAuth(token) ? undefined : authInfo.clientId,
+    userId: authInfo.clientId,
     role: authInfo.scopes?.[0] || 'public',
-    token,
+    token: authInfo.token,
   };
 }
 

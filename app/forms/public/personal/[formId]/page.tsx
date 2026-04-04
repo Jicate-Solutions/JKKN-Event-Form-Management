@@ -510,14 +510,6 @@ export default function PublicPersonalFormPage() {
               </div>
             )}
 
-            {form.submission_limit && submissionCount !== null && (
-              <div className='mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg'>
-                <p className='text-sm text-blue-900 dark:text-blue-100'>
-                  {form.submission_limit - submissionCount} of{' '}
-                  {form.submission_limit} submissions remaining
-                </p>
-              </div>
-            )}
           </CardHeader>
         </Card>
 

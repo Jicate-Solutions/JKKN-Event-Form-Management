@@ -340,22 +340,33 @@ export function FormBuilder() {
               name='submission_limit'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Submission Limit (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type='number'
-                      placeholder='Enter maximum number of submissions'
-                      {...field}
-                      value={field.value ?? ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.onChange(value ? parseInt(value, 10) : undefined);
+                  <div className='flex items-center justify-between'>
+                    <FormLabel>Response Submission Limit</FormLabel>
+                    <Switch
+                      checked={field.value !== undefined && field.value !== null}
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked ? 100 : undefined);
                       }}
                     />
-                  </FormControl>
+                  </div>
+                  {field.value !== undefined && field.value !== null && (
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        placeholder='Enter maximum number of submissions'
+                        value={field.value ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          field.onChange(value ? parseInt(value, 10) : undefined);
+                        }}
+                      />
+                    </FormControl>
+                  )}
                   <p className='text-sm text-muted-foreground'>
-                    Leave empty for unlimited submissions. Once limit is
-                    reached, new submissions will be blocked.
+                    {field.value !== undefined && field.value !== null
+                      ? `Form will stop accepting responses after ${field.value} submissions.`
+                      : 'Enable to set a maximum number of submissions for this form.'}
                   </p>
                   <FormMessage />
                 </FormItem>

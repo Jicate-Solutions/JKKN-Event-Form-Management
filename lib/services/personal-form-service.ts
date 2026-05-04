@@ -1033,15 +1033,15 @@ export const PersonalFormService = {
    * Export responses to Excel format
    * Requires: Creator OR collaborator with can_export_data
    */
-  async exportToExcel(personalFormId: string, userId?: string): Promise<Buffer> {
+  async exportToExcel(personalFormId: string, userId?: string, supabaseClient?: any): Promise<Buffer> {
     try {
       // Check permissions if userId provided
       if (userId) {
         await this.checkExportDataPermission(personalFormId, userId);
       }
 
-      const form = await this.getPersonalForm(personalFormId);
-      const responses = await this.getAllResponsesForExport(personalFormId);
+      const form = await this.getPersonalForm(personalFormId, undefined, supabaseClient);
+      const responses = await this.getAllResponsesForExport(personalFormId, supabaseClient);
 
       if (responses.length === 0) {
         throw new Error('No responses to export');

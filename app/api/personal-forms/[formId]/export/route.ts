@@ -45,12 +45,12 @@ export const GET = withAuthApi(async (req, context, session) => {
     }
 
     // Get the form for filename
-    const form = await PersonalFormService.getPersonalForm(formId);
+    const form = await PersonalFormService.getPersonalForm(formId, undefined, supabase);
     const timestamp = new Date().toISOString().split('T')[0];
     const safeTitle = form.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
     if (format === 'csv') {
-      const csv = await PersonalFormService.exportToCSV(formId);
+      const csv = await PersonalFormService.exportToCSV(formId, undefined, supabase);
 
       return new NextResponse(csv, {
         status: 200,
@@ -62,7 +62,7 @@ export const GET = withAuthApi(async (req, context, session) => {
       });
     } else {
       // Excel export
-      const excel = await PersonalFormService.exportToExcel(formId);
+      const excel = await PersonalFormService.exportToExcel(formId, undefined, supabase);
 
       return new NextResponse(excel as unknown as BodyInit, {
         status: 200,

@@ -142,7 +142,12 @@ export default function ResponsesPage() {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to export responses');
+        let message = 'Failed to export responses';
+        try {
+          const data = await response.json();
+          if (data?.error) message = data.error;
+        } catch {}
+        throw new Error(message);
       }
 
       const blob = await response.blob();
@@ -158,7 +163,7 @@ export default function ResponsesPage() {
       toast.success(`Exported ${responsesData?.total || 0} responses`);
     } catch (error) {
       console.error('Export error:', error);
-      toast.error('Failed to export responses');
+      toast.error((error as Error).message || 'Failed to export responses');
     } finally {
       setIsExporting(false);
     }

@@ -574,3 +574,51 @@ When testing payments:
 - Support dark mode with proper contrast
 - React 19 features: use Actions API for forms where appropriate
 - Shadcn components as first choice for UI elements
+
+
+---
+
+# Rules for Newcomers (intern-ready)
+
+## Before Building Anything New — the Pattern Survey (mandatory)
+
+Claude generates plausible parallel versions of things that already exist. That is the #1 cause of unmergeable work. So before creating ANY new table, service, hook, or utility:
+
+1. Search for existing tables/types matching your entity name (`grep -ri "<entity>" --include="*.sql" --include="*.ts" .`)
+2. Search for existing services/hooks in the same domain (`ls` the services/hooks folders, read names)
+3. Search for how auth/permissions are already done — reuse that mechanism, never invent one
+4. If something similar exists: USE IT or EXTEND IT. Never create a parallel mechanism.
+
+This survey takes 5 minutes and saves days of rework.
+
+## Integration Contract (before any module-sized work)
+
+Before starting anything bigger than a small fix, write a half-page answer to these four questions and get it approved by a reviewer:
+
+1. Which **existing tables** will I read/write? Which **new** ones do I create?
+2. Which **existing services/hooks/components** will I reuse (name them with file paths)?
+3. Where does **auth/permission checking** come from? (must be the existing mechanism)
+4. What is my **first thin end-to-end slice** (one table + one route + one page)?
+
+## Work Rules
+
+- **Small PRs**: one task per PR, roughly ≤400 changed lines, ≤2 days of work. Bigger → split it.
+- **PR-only**: never push directly to the default branch.
+- **First PR within 48 hours** of starting any module: the thin vertical slice, wired into the real app (behind a feature flag if needed).
+- **Proof of done**: every PR includes a screenshot/short video (UI) or command output (non-UI) showing the change working. "It compiles" is not done.
+- **Stay in scope**: touch only files the task requires. Mention other problems in the PR description; don't fix them in the same PR.
+- **No secrets in code**: keys and tokens live in environment variables, never in committed files.
+
+## Off-Limits Without Explicit Approval
+
+Do not touch these without a reviewer's written OK in the issue/PR first:
+
+- Authentication / session logic
+- Database migrations and RLS (row-level security) policies
+- Anything involving payments or money
+- Deleting or renaming existing tables/columns
+- CI workflows and branch-protection settings
+
+## Definition of Done
+
+A task is done when: PR is open → CI is green → proof screenshot/output is attached → one reviewer approved → merged. Nothing else counts.

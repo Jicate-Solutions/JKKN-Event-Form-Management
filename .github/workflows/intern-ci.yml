@@ -1,0 +1,53 @@
+name: Intern CI
+
+on:
+  pull_request:
+
+jobs:
+  typecheck:
+    # NOTE: this job name is the required status check context in branch protection.
+    # If you rename this job, update the protection rule to match.
+    name: Intern CI (typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          if [ ! -f package.json ]; then echo "No package.json yet — nothing to check."; exit 0; fi
+          if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile || pnpm install; \
+          elif [ -f package-lock.json ]; then npm ci || npm install; \
+          else npm install; fi
+
+      - name: Typecheck
+        run: |
+          if [ ! -f package.json ]; then echo "No package.json — skipping."; exit 0; fi
+          if jq -e '.scripts.typecheck' package.json >/dev/null; then npm run typecheck; \
+          elif [ -f tsconfig.json ]; then npx tsc --noEmit; \
+          else echo "No TypeScript config found — skipping."; fi
+
+  build:
+    # Advisory only (continue-on-error): builds often need env vars/secrets that
+    # intern repos shouldn't hand out. Green typecheck is the blocking gate.
+    name: Intern CI (build, advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build
+        run: |
+          if [ ! -f package.json ]; then echo "No package.json — skipping."; exit 0; fi
+          if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile || pnpm install; \
+          elif [ -f package-lock.json ]; then npm ci || npm install; \
+          else npm install; fi
+          if jq -e '.scripts.build' package.json >/dev/null; then npm run build; \
+          else echo "No build script — skipping."; fi

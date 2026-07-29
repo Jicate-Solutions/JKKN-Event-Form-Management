@@ -353,9 +353,14 @@ export const PersonalFormService = {
         }
       }
 
-      // If title is being updated, regenerate slug
-      if (updates.title && updates.title !== currentForm.title) {
-        const baseSlug = generateSlug(updates.title);
+      // The slug is part of the form's public URL, so it is immutable once set.
+      // Renaming a form must never break links that have already been shared,
+      // so never regenerate the slug here and never let a caller-supplied one through.
+      delete updates.slug;
+
+      // Legacy forms created before slugs existed still get one backfilled.
+      if (!currentForm.slug) {
+        const baseSlug = generateSlug(updates.title || currentForm.title);
 
         // Inline slug check using the same client instance
         const checkSlug = async (slug: string) => {

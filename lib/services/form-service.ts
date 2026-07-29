@@ -217,16 +217,19 @@ export const FormService = {
   async updateForm(id: string, updates: Partial<Form>) {
     const supabase = createClientSupabaseClient();
 
-    // If title is being updated, update the slug as well
+    // The slug is part of the form's public URL, so it is immutable once set.
+    // Renaming a form must never break links that have already been shared,
+    // so never regenerate the slug here and never let a caller-supplied one through.
+    delete updates.slug;
+
+    // Add slug to existing forms that don't have one
     if (updates.title) {
-      const baseSlug = generateSlug(updates.title);
-      // Check if we need to generate a new unique slug
       const currentForm = await this.getForm(id);
-      if (currentForm.slug && baseSlug !== currentForm.slug.split('-')[0]) {
-        updates.slug = await generateUniqueSlug(baseSlug, this.checkSlugExists);
-      } else if (!currentForm.slug) {
-        // Add slug to existing forms that don't have one
-        updates.slug = await generateUniqueSlug(baseSlug, this.checkSlugExists);
+      if (!currentForm.slug) {
+        updates.slug = await generateUniqueSlug(
+          generateSlug(updates.title),
+          this.checkSlugExists
+        );
       }
     }
 

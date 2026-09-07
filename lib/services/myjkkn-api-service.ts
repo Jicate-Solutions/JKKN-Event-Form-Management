@@ -11,6 +11,24 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
+ * Raised when the MYJKKN directory itself is unreachable or misbehaving
+ * (endpoint missing, HTML instead of JSON, timeout, auth failure).
+ *
+ * This is deliberately distinct from "user is not in the directory": callers
+ * must be able to tell an outage apart from a genuine miss, because blocking a
+ * submission is only correct for the latter.
+ */
+export class MYJKKNUpstreamError extends Error {
+  constructor(
+    message: string,
+    public readonly endpoint: string
+  ) {
+    super(message);
+    this.name = 'MYJKKNUpstreamError';
+  }
+}
+
+/**
  * MYJKKN API Service
  * Handles fetching user profile data from MYJKKN application
  * with caching and automatic cache invalidation
@@ -18,6 +36,46 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export class MYJKKNApiService {
   private static readonly CACHE_DURATION_HOURS = 24;
   private static readonly API_TIMEOUT_MS = 10000; // 10 seconds
+
+  // The upstream `?search=` parameter matches first_name, last_name, staff_id
+  // and the PERSONAL `email` column - it does NOT index `institution_email`.
+  // ~38% of staff have a personal email that differs from their institutional
+  // one, so searching by institutional email silently returns 0 results for
+  // them. When the search misses we fall back to scanning the directory and
+  // matching `institution_email` locally.
+  private static readonly DIRECTORY_PAGE_LIMIT = 1000;
+  private static readonly DIRECTORY_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private static staffDirectoryCache: {
+    fetchedAt: number;
+    staff: MYJKKNStaff[];
+  } | null = null;
+
+  /**
+   * Parse a fetch Response as JSON, failing loudly when the body is not JSON.
+   *
+   * A missing route on the MYJKKN app returns its SPA shell as `text/html` with
+   * HTTP 200, which makes `response.ok` true and then explodes inside
+   * `response.json()` as "Unexpected token '<'". Without this guard that looks
+   * identical to "user not found".
+   */
+  private static async parseJsonResponse<T>(
+    response: Response,
+    endpoint: string
+  ): Promise<T> {
+    const contentType = response.headers.get('content-type') || '';
+
+    if (!contentType.includes('application/json')) {
+      const preview = (await response.text()).slice(0, 120).replace(/\s+/g, ' ');
+      throw new MYJKKNUpstreamError(
+        `Expected JSON from ${endpoint} but received "${contentType}" ` +
+          `(HTTP ${response.status}). The endpoint is likely missing or not ` +
+          `enabled for this API key. Body starts: ${preview}`,
+        endpoint
+      );
+    }
+
+    return (await response.json()) as T;
+  }
 
   /**
    * Fetch user profile with caching
@@ -69,6 +127,13 @@ export class MYJKKNApiService {
 
       return profile;
     } catch (error) {
+      // An outage must NOT be reported as "user not found" - the caller decides
+      // how to handle a broken directory, and it is not the user's fault.
+      if (error instanceof MYJKKNUpstreamError) {
+        console.error('[MYJKKN API] ❌ Directory unavailable:', error.message);
+        throw error;
+      }
+
       console.error('[MYJKKN API] ❌ Error getting user profile:', error);
       return null; // Gracefully fail - don't block form submission
     }
@@ -77,11 +142,17 @@ export class MYJKKNApiService {
   /**
    * Fetch user profile from MYJKKN API
    * Tries student endpoint first, then staff endpoint (Sequential Search)
+   *
+   * Returns null only when BOTH directories answered successfully and neither
+   * held the email. If either directory was unreachable we cannot prove the
+   * user is absent, so we surface the outage instead of a false negative.
    */
   private static async fetchUserProfile(
     email: string,
     apiKey: string
   ): Promise<UserProfile | null> {
+    const outages: MYJKKNUpstreamError[] = [];
+
     // Try student endpoint first
     try {
       const studentProfile = await this.fetchStudentByEmail(email, apiKey);
@@ -89,7 +160,10 @@ export class MYJKKNApiService {
         return studentProfile;
       }
     } catch (error) {
-      console.log('Not found in students, trying staff...', error);
+      if (error instanceof MYJKKNUpstreamError) {
+        outages.push(error);
+      }
+      console.log('[MYJKKN API] Not found in students, trying staff...', error);
     }
 
     // Try staff endpoint
@@ -99,10 +173,87 @@ export class MYJKKNApiService {
         return staffProfile;
       }
     } catch (error) {
-      console.log('Not found in staff', error);
+      if (error instanceof MYJKKNUpstreamError) {
+        outages.push(error);
+      }
+      console.log('[MYJKKN API] Not found in staff', error);
     }
 
-    throw new Error('User profile not found in MYJKKN database');
+    if (outages.length > 0) {
+      throw new MYJKKNUpstreamError(
+        `Could not verify ${email}: ` +
+          outages.map((o) => `[${o.endpoint}] ${o.message}`).join(' | '),
+        outages.map((o) => o.endpoint).join(',')
+      );
+    }
+
+    // Both directories responded and neither knows this email.
+    return null;
+  }
+
+  /**
+   * Fetch the full staff directory (cached briefly in-process).
+   *
+   * Used as the fallback when `?search=` misses, because upstream search does
+   * not index `institution_email`. The upstream API accepts `limit=1000` and
+   * returns the whole roster in a single response.
+   */
+  private static async fetchStaffDirectory(
+    apiKey: string
+  ): Promise<MYJKKNStaff[]> {
+    const cached = this.staffDirectoryCache;
+    if (cached && Date.now() - cached.fetchedAt < this.DIRECTORY_TTL_MS) {
+      console.log(
+        `[MYJKKN API] Using in-process staff directory (${cached.staff.length} records)`
+      );
+      return cached.staff;
+    }
+
+    const endpoint = `${process.env.NEXT_PUBLIC_MYJKKN_API_URL}/api/api-management/staff`;
+    const url = `${endpoint}?limit=${this.DIRECTORY_PAGE_LIMIT}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.API_TIMEOUT_MS);
+
+    try {
+      console.log('[MYJKKN API] Fetching full staff directory (search fallback)');
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new MYJKKNUpstreamError(
+          `Staff directory error: HTTP ${response.status}`,
+          endpoint
+        );
+      }
+
+      const data = await this.parseJsonResponse<MYJKKNApiResponse<MYJKKNStaff>>(
+        response,
+        endpoint
+      );
+
+      const staff = data.data || [];
+      console.log(`[MYJKKN API] Staff directory loaded: ${staff.length} records`);
+
+      this.staffDirectoryCache = { fetchedAt: Date.now(), staff };
+      return staff;
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new MYJKKNUpstreamError(
+          'Staff directory request timeout',
+          endpoint
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**
@@ -116,10 +267,10 @@ export class MYJKKNApiService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.API_TIMEOUT_MS);
 
-    try {
-      // Use search parameter to find student by email
-      const searchUrl = `${process.env.NEXT_PUBLIC_MYJKKN_API_URL}/api/api-management/students?search=${encodeURIComponent(email)}`;
+    // Use search parameter to find student by email
+    const searchUrl = `${process.env.NEXT_PUBLIC_MYJKKN_API_URL}/api/api-management/students?search=${encodeURIComponent(email)}`;
 
+    try {
       console.log('[MYJKKN API] Fetching student from:', searchUrl);
       console.log('[MYJKKN API] Using API key:', apiKey.substring(0, 10) + '...');
 
@@ -143,10 +294,16 @@ export class MYJKKNApiService {
         }
         const errorText = await response.text();
         console.error('[MYJKKN API] Student API error:', response.status, errorText);
-        throw new Error(`Student API error: ${response.status}`);
+        throw new MYJKKNUpstreamError(
+          `Student API error: HTTP ${response.status}`,
+          searchUrl
+        );
       }
 
-      const data: MYJKKNApiResponse<MYJKKNStudent> = await response.json();
+      const data = await this.parseJsonResponse<MYJKKNApiResponse<MYJKKNStudent>>(
+        response,
+        searchUrl
+      );
       console.log('[MYJKKN API] Student API returned:', data.data.length, 'results');
 
       // Find exact email match using COLLEGE_EMAIL (institutional email)
@@ -178,10 +335,12 @@ export class MYJKKNApiService {
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.error('[MYJKKN API] ❌ Student API request timeout');
-        throw new Error('Student API request timeout');
+        throw new MYJKKNUpstreamError('Student API request timeout', searchUrl);
       }
       console.error('[MYJKKN API] ❌ Student fetch error:', error);
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -196,10 +355,10 @@ export class MYJKKNApiService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.API_TIMEOUT_MS);
 
-    try {
-      // Use search parameter to find staff by email
-      const searchUrl = `${process.env.NEXT_PUBLIC_MYJKKN_API_URL}/api/api-management/staff?search=${encodeURIComponent(email)}`;
+    // Use search parameter to find staff by email
+    const searchUrl = `${process.env.NEXT_PUBLIC_MYJKKN_API_URL}/api/api-management/staff?search=${encodeURIComponent(email)}`;
 
+    try {
       console.log('[MYJKKN API] Fetching staff from:', searchUrl);
       console.log('[MYJKKN API] Using API key:', apiKey.substring(0, 10) + '...');
 
@@ -223,46 +382,76 @@ export class MYJKKNApiService {
         }
         const errorText = await response.text();
         console.error('[MYJKKN API] Staff API error:', response.status, errorText);
-        throw new Error(`Staff API error: ${response.status}`);
+        throw new MYJKKNUpstreamError(
+          `Staff API error: HTTP ${response.status}`,
+          searchUrl
+        );
       }
 
-      const data: MYJKKNApiResponse<MYJKKNStaff> = await response.json();
+      const data = await this.parseJsonResponse<MYJKKNApiResponse<MYJKKNStaff>>(
+        response,
+        searchUrl
+      );
       console.log('[MYJKKN API] Staff API returned:', data.data.length, 'results');
 
       // Find exact email match using INSTITUTION_EMAIL (institutional email)
       // NOT email or staff_email (personal email)
-      const staff = data.data.find(
-        (s) => s.institution_email?.toLowerCase() === email.toLowerCase()
-      );
+      let staff = this.matchByInstitutionEmail(data.data, email);
+
+      if (!staff) {
+        // Upstream `?search=` does not index institution_email, so a miss here
+        // proves nothing. Scan the full directory before declaring absence.
+        console.log(
+          `[MYJKKN API] Search missed institution_email: ${email} - scanning full directory`
+        );
+        const directory = await this.fetchStaffDirectory(apiKey);
+        staff = this.matchByInstitutionEmail(directory, email);
+      }
 
       if (!staff) {
         console.log(`[MYJKKN API] No staff found with institution_email: ${email}`);
-        console.log('[MYJKKN API] Available emails in results:', data.data.map(s => s.institution_email));
         return null; // No exact match found
       }
 
       console.log(`[MYJKKN API] ✅ Staff found: ${staff.first_name} ${staff.last_name} (${staff.staff_id})`);
 
-      // Transform to unified profile structure
+      // Transform to unified profile structure.
+      // NOTE: the upstream payload uses `phone` (not `staff_mobile`) and
+      // `category.category_name` (not `category.name`).
       return {
         user_type: 'staff',
         full_name: `${staff.first_name} ${staff.last_name}`.trim(),
         email: staff.institution_email, // Use institutional email
-        mobile: staff.staff_mobile,
+        mobile: staff.phone ?? null,
         institution_name: staff.institution?.name || null,
         department_name: staff.department?.department_name || null,
         identifier: staff.staff_id,
-        additional_info: staff.category?.name || null,
+        additional_info: staff.category?.category_name || null,
         is_active: staff.is_active
       };
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.error('[MYJKKN API] ❌ Staff API request timeout');
-        throw new Error('Staff API request timeout');
+        throw new MYJKKNUpstreamError('Staff API request timeout', searchUrl);
       }
       console.error('[MYJKKN API] ❌ Staff fetch error:', error);
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
+  }
+
+  /**
+   * Case-insensitive exact match on the institutional email.
+   */
+  private static matchByInstitutionEmail(
+    staff: MYJKKNStaff[],
+    email: string
+  ): MYJKKNStaff | undefined {
+    const target = email.trim().toLowerCase();
+    return staff.find(
+      (s) => s.institution_email?.trim().toLowerCase() === target
+    );
   }
 
   /**

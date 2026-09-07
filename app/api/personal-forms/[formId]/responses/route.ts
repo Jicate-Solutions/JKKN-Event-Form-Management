@@ -9,7 +9,10 @@ import {
   isEmailDomainAllowed,
   formatDomainsForDisplay
 } from '@/lib/utils/domain-validation';
-import { MYJKKNApiService } from '@/lib/services/myjkkn-api-service';
+import {
+  MYJKKNApiService,
+  MYJKKNUpstreamError
+} from '@/lib/services/myjkkn-api-service';
 import { UserProfile, PersonalForm } from '@/types/personal-forms';
 
 /**
@@ -39,6 +42,18 @@ async function fetchUserProfileIfEnabled(
 
   if (!userEmail) {
     console.log('[Auto-Fetch] ❌ No user email provided for auto-fetch');
+
+    // Omitting the email must not be a way to skip a required profile. Without
+    // an email there is nothing to verify, so a form that demands a verified
+    // institutional profile has to reject the submission outright.
+    if (form.require_institutional_profile) {
+      console.log(
+        '[Auto-Fetch] ❌ Profile is REQUIRED but no email supplied - blocking'
+      );
+      console.log('============================================\n');
+      throw new Error('PROFILE_REQUIRED');
+    }
+
     console.log('============================================\n');
     return null;
   }
@@ -87,6 +102,24 @@ async function fetchUserProfileIfEnabled(
       message: error.message,
       stack: error.stack
     });
+
+    // Fail open on an outage. A directory that is down cannot prove the user is
+    // unregistered, so blocking here would turn a MYJKKN incident into a wall
+    // of "Email Not Registered" for legitimate users. Domain restriction still
+    // applies as a separate gate.
+    if (error instanceof MYJKKNUpstreamError) {
+      console.error(
+        '[Auto-Fetch] 🚨 MYJKKN DIRECTORY UNAVAILABLE - allowing submission ' +
+          'without profile verification. Endpoint:',
+        error.endpoint
+      );
+      console.error(
+        '[Auto-Fetch] 🚨 Institutional profile verification is DEGRADED for ' +
+          `form "${form.title}" (${form.id}). Investigate the MYJKKN API.`
+      );
+      console.log('============================================\n');
+      return null;
+    }
 
     // If profile is required, throw the error to block submission
     if (
@@ -209,13 +242,58 @@ export async function POST(
       );
     }
 
+    // Establish the email this submission is attributed to.
+    //
+    // This endpoint is public for published forms, so `body.user_email` is
+    // caller-supplied and proves nothing. When the submitter does have a
+    // session, the session's email IS verified, so it must win - otherwise a
+    // logged-in user could submit under someone else's institutional address,
+    // and the domain/profile gates would happily approve it.
+    //
+    // Anonymous submitters still fall back to the claimed email; that path is
+    // guarded only by the domain and MYJKKN directory checks.
+    let submissionEmail: string | null = body.user_email || null;
+    let isEmailVerified = false;
+
+    try {
+      const { createServerSupabaseClient } = await import(
+        '@/lib/supabase/server'
+      );
+      const supabase = await createServerSupabaseClient();
+      // getUser() validates the JWT against the Auth server; getSession() does not.
+      const {
+        data: { user: sessionUser }
+      } = await supabase.auth.getUser();
+
+      if (sessionUser?.email) {
+        if (
+          body.user_email &&
+          body.user_email.trim().toLowerCase() !==
+            sessionUser.email.trim().toLowerCase()
+        ) {
+          console.warn(
+            '[Submit] Claimed email does not match the authenticated session. ' +
+              'Using the session email. claimed=%s session=%s',
+            body.user_email,
+            sessionUser.email
+          );
+        }
+        submissionEmail = sessionUser.email;
+        isEmailVerified = true;
+      }
+    } catch (sessionError) {
+      // No session (ordinary anonymous public submission) - keep the claimed email.
+      console.log(
+        '[Submit] No authenticated session; treating submission as anonymous.'
+      );
+    }
+
     // Check domain restriction if enabled
     if (
       form.restrict_domain &&
       form.allowed_domains &&
       form.allowed_domains.length > 0
     ) {
-      const submissionEmail = body.user_email;
 
       // Require email for domain-restricted forms
       if (!submissionEmail) {
@@ -267,7 +345,7 @@ export async function POST(
       try {
         userProfile = await fetchUserProfileIfEnabled(
           form,
-          body.user_email || null
+          submissionEmail
         );
       } catch (profileError: any) {
         console.error(
@@ -281,13 +359,21 @@ export async function POST(
           form.require_institutional_profile
         ) {
           return NextResponse.json(
-            {
-              error: 'Email Not Registered',
-              message: `Your email (${body.user_email}) was not found in the MYJKKN system. This form requires a valid institutional profile. Please ensure you're using your institutional email (@jkkn.ac.in) or contact the administrator.`,
-              code: 'PROFILE_NOT_FOUND',
-              allow_manual_fallback: form.allow_manual_entry_fallback
-            },
-            { status: 404 }
+            submissionEmail
+              ? {
+                  error: 'Email Not Registered',
+                  message: `Your email (${submissionEmail}) was not found in the MYJKKN system. This form requires a valid institutional profile. Please ensure you're using your institutional email (@jkkn.ac.in) or contact the administrator.`,
+                  code: 'PROFILE_NOT_FOUND',
+                  allow_manual_fallback: form.allow_manual_entry_fallback
+                }
+              : {
+                  error: 'Email Required',
+                  message:
+                    'This form requires a verified institutional profile, so an institutional email address is mandatory.',
+                  code: 'EMAIL_REQUIRED',
+                  allow_manual_fallback: form.allow_manual_entry_fallback
+                },
+            { status: submissionEmail ? 404 : 400 }
           );
         }
 
@@ -303,9 +389,11 @@ export async function POST(
         .rpc('create_personal_form_response', {
           p_personal_form_id: formId,
           p_response_data: body.response_data,
-          p_user_email: body.user_email || null,
+          p_user_email: submissionEmail,
           p_submitted_by: null,
-          p_is_anonymous: body.is_anonymous ?? true,
+          // A session-verified email is never an anonymous submission, whatever
+          // the client claims.
+          p_is_anonymous: isEmailVerified ? false : (body.is_anonymous ?? true),
           p_user_profile: (userProfile as any) || null
         })
         .single();
@@ -325,7 +413,9 @@ export async function POST(
         personal_form_id: formId,
         response_data: body.response_data,
         submitted_by: user.id,
-        user_email: body.user_email || user.email,
+        // Session email is authoritative - a logged-in user must not be able to
+        // submit under someone else's address by setting body.user_email.
+        user_email: user.email || body.user_email,
         is_anonymous: body.is_anonymous ?? false
       };
 

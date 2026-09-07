@@ -318,9 +318,9 @@ export interface MYJKKNStaff {
   first_name: string;
   last_name: string;
   staff_id: string;
-  email: string;                  // Personal email (not used)
-  institution_email: string;      // Institutional email (USED)
-  staff_mobile: string | null;
+  email: string;                  // Personal email (not used for matching)
+  institution_email: string;      // Institutional email (USED for matching)
+  phone: string | null;           // Contact number (upstream field is `phone`)
   institution: {
     id: string;
     name: string;
@@ -331,7 +331,8 @@ export interface MYJKKNStaff {
   } | null;
   category: {
     id: string;
-    name: string;
+    category_name: string;
+    is_teaching: boolean;
   } | null;
   is_active: boolean;
 }

@@ -5,6 +5,7 @@ import AdminPanelLayout from '@/components/layout/admin-panel-layout';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
 import { BeatLoader } from 'react-spinners';
 import ErrorBoundary from '@/components/error/ErrorBoundary';
+import { BugReporterWrapper } from '@/components/bug-reporter/bug-reporter-wrapper';
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
 
@@ -27,7 +28,9 @@ export default function DashboardLayout({
     <ErrorBoundary>
       <AdminPanelLayout>
         <AuthProvider>
-          <LayoutContent>{children}</LayoutContent>
+          <BugReporterWrapper>
+            <LayoutContent>{children}</LayoutContent>
+          </BugReporterWrapper>
         </AuthProvider>
       </AdminPanelLayout>
     </ErrorBoundary>
